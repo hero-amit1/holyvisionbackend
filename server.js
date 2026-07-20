@@ -129,18 +129,18 @@ if (hasClientDist) {
   );
 }
 
-// ─── Root route (API-only deploys — gives a friendly response instead of 404) ──
+// ─── Root route — always registered so Render port scanner sees an open port ──
+// When client/dist is present the static middleware above will serve index.html
+// instead, so this only fires on API-only deploys.
 
-if (!hasClientDist) {
-  app.get('/', (_req, res) => {
-    res.json({
-      name:    'HolyVision Technical Campus API',
-      status:  'ok',
-      version: '1.0.0',
-      docs:    '/api/health',
-    });
+app.get('/', (_req, res) => {
+  res.json({
+    name:    'HolyVision Technical Campus API',
+    status:  'ok',
+    version: '1.0.0',
+    docs:    '/api/health',
   });
-}
+});
 
 // ─── API routes ───────────────────────────────────────────────────────────────
 
@@ -172,11 +172,19 @@ app.use(errorHandler);
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 async function start() {
-  await connectDB();
-
+  // ── Bind port first so Render's scanner sees it immediately ──────────────
   const server = app.listen(PORT, () => {
     console.info(`[SERVER] Listening on port ${PORT}  (${NODE_ENV})`);
   });
+
+  // ── Then connect to DB (non-blocking for port binding) ───────────────────
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('[FATAL] DB connection failed — shutting down:', err.message);
+    server.close(() => process.exit(1));
+    return;
+  }
 
   // ── Graceful shutdown ──────────────────────────────────────────────────────
 
