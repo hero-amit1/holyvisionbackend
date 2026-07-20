@@ -13,6 +13,7 @@
 
 import path              from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync }    from 'fs';
 import express           from 'express';
 import cors              from 'cors';
 import helmet            from 'helmet';
@@ -108,10 +109,12 @@ app.use(hpp());                                 // prevent HTTP parameter pollut
 
 app.use(globalLimiter);
 
-// ─── Static files (production) ────────────────────────────────────────────────
+// ─── Static files (production — only when client/dist exists alongside server) ────
 
-if (IS_PROD) {
-  const clientDist = path.resolve(__dirname, '..', 'client', 'dist');
+const clientDist = path.resolve(__dirname, '..', 'client', 'dist');
+const hasClientDist = IS_PROD && existsSync(clientDist);
+
+if (hasClientDist) {
   app.use(
     express.static(clientDist, {
       maxAge: '7d',
@@ -126,6 +129,19 @@ if (IS_PROD) {
   );
 }
 
+// ─── Root route (API-only deploys — gives a friendly response instead of 404) ──
+
+if (!hasClientDist) {
+  app.get('/', (_req, res) => {
+    res.json({
+      name:    'HolyVision Technical Campus API',
+      status:  'ok',
+      version: '1.0.0',
+      docs:    '/api/health',
+    });
+  });
+}
+
 // ─── API routes ───────────────────────────────────────────────────────────────
 
 app.use('/api/health',       healthRouter);
@@ -138,8 +154,8 @@ app.use('/api/applications', applicationsRouter);
 
 // ─── SPA fallback (production — must be after API routes) ─────────────────────
 
-if (IS_PROD) {
-  const indexHtml = path.resolve(__dirname, '..', 'client', 'dist', 'index.html');
+if (hasClientDist) {
+  const indexHtml = path.resolve(clientDist, 'index.html');
   app.get('*', (_req, res) => res.sendFile(indexHtml));
 }
 
